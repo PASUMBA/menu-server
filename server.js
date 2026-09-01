@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Initialize Gemini API SDK safely
+// Safely initialize Gemini SDK
 const apiKey = process.env.GEMINI_API_KEY;
 let ai = null;
 if (apiKey) {
@@ -23,7 +23,7 @@ if (apiKey) {
 app.use(cors());
 app.use(express.json());
 
-// Serve static frontend files from the public folder
+// Serve static frontend files from the public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Master Menu Data with Multicultural Cuisines & High-Quality Images
@@ -113,7 +113,7 @@ const masterMenu = {
 let currentActiveMenu = { ...masterMenu, detectedLanguage: "English", isRTL: false };
 let sseClients = [];
 
-// Serve frontend from public/index.html
+// Explicit root route serving index.html from public folder
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -143,13 +143,13 @@ app.post('/api/translate', (req, res) => {
     return res.status(400).json({ error: "Missing 'input' parameter in request body." });
   }
 
-  // Acknowledge hardware request immediately to prevent connection timeouts
+  // Acknowledge hardware request immediately so ESP32 connection never times out
   res.status(200).json({ 
     success: true, 
     message: "Translation queued successfully." 
   });
 
-  // Background translation processing
+  // Background translation processing with fallback models
   (async () => {
     const cacheKey = input.trim().toLowerCase();
 
@@ -161,11 +161,11 @@ app.post('/api/translate', (req, res) => {
     }
 
     if (!ai) {
-      console.error("Gemini API call skipped: GEMINI_API_KEY environment variable is not set.");
+      console.error("Gemini API call skipped: GEMINI_API_KEY environment variable is missing.");
       return;
     }
 
-    console.log(`[Gemini API Call] Translating menu for input: "${input}"`);
+    console.log(`[Gemini API Call] Requesting translation for: "${input}"`);
 
     const promptText = `
 Analyze this input text: "${input}". 
@@ -178,49 +178,74 @@ Data:
 ${JSON.stringify(masterMenu)}
 `;
 
-    try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: promptText,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'OBJECT',
-            properties: {
-              detectedLanguage: { type: 'STRING' },
-              restaurantName: { type: 'STRING' },
-              subtitle: { type: 'STRING' },
-              isRTL: { type: 'BOOLEAN' },
-              categories: {
-                type: 'ARRAY',
-                items: {
-                  type: 'OBJECT',
-                  properties: {
-                    categoryName: { type: 'STRING' },
-                    items: {
-                      type: 'ARRAY',
-                      items: {
-                        type: 'OBJECT',
-                        properties: {
-                          id: { type: 'STRING' },
-                          name: { type: 'STRING' },
-                          desc: { type: 'STRING' },
-                          price: { type: 'STRING' },
-                          image: { type: 'STRING' }
-                        },
-                        required: ['id', 'name', 'desc', 'price', 'image']
-                      }
-                    }
-                  },
-                  required: ['categoryName', 'items']
-                }
-              }
-            },
-            required: ['detectedLanguage', 'restaurantName', 'subtitle', 'isRTL', 'categories']
-          }
-        }
-      });
+    // Candidate models to attempt in order if high demand/503 errors occur
+    const candidateModels = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+    let response = null;
+    let lastError = null;
 
+    for (const modelName of candidateModels) {
+      try {
+        console.log(`[Attempting Model] Trying ${modelName}...`);
+        response = await ai.models.generateContent({
+          model: modelName,
+          contents: promptText,
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: 'OBJECT',
+              properties: {
+                detectedLanguage: { type: 'STRING' },
+                restaurantName: { type: 'STRING' },
+                subtitle: { type: 'STRING' },
+                isRTL: { type: 'BOOLEAN' },
+                categories: {
+                  type: 'ARRAY',
+                  items: {
+                    type: 'OBJECT',
+                    properties: {
+                      categoryName: { type: 'STRING' },
+                      items: {
+                        type: 'ARRAY',
+                        items: {
+                          type: 'OBJECT',
+                          properties: {
+                            id: { type: 'STRING' },
+                            name: { type: 'STRING' },
+                            desc: { type: 'STRING' },
+                            price: { type: 'STRING' },
+                            image: { type: 'STRING' }
+                          },
+                          required: ['id', 'name', 'desc', 'price', 'image']
+                        }
+                      }
+                    },
+                    required: ['categoryName', 'items']
+                  }
+                }
+              },
+              required: ['detectedLanguage', 'restaurantName', 'subtitle', 'isRTL', 'categories']
+            }
+          }
+        });
+
+        if (response) {
+          console.log(`[Success] Received response from ${modelName}`);
+          break; // Exit loop on successful generation
+        }
+      } catch (err) {
+        console.warn(`[Model ${modelName} Failed]: ${err.message}`);
+        lastError = err;
+        // Wait 1 second before trying the fallback model
+        await new Promise(res => setTimeout(res, 1000));
+      }
+    }
+
+    if (!response) {
+      console.error("All Gemini model attempts failed:", lastError?.message);
+      return;
+    }
+
+    try {
       const rawText = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text;
       const translatedMenu = JSON.parse(rawText);
 
@@ -231,8 +256,8 @@ ${JSON.stringify(masterMenu)}
       sseClients.forEach(client => client.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`));
       console.log(`[Success] Menu updated to ${translatedMenu.detectedLanguage}`);
 
-    } catch (err) {
-      console.error("Gemini API Error:", err.message);
+    } catch (parseErr) {
+      console.error("JSON Parsing Error:", parseErr.message);
     }
   })();
 });
