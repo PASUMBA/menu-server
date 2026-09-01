@@ -1,95 +1,63 @@
 import express from 'express';
-import { GoogleGenAI } from '@google/genai';
-import dotenv from 'dotenv';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { GoogleGenAI } from '@google/genai';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PORT = process.env.PORT || 3000;
 
+// Initialize Gemini SDK
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+// Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 
-// Initialize Google Gen AI Client
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Serve static frontend files (if index.html is in the root directory)
+app.use(express.static(__dirname));
 
 // Master Menu Data
 const masterMenu = {
-  restaurantName: "Grand Palace Bistro",
-  subtitle: "Authentic Culinary Delights & Fresh Ingredients",
-  detectedLanguage: "English (Default)",
-  isRTL: false,
+  restaurantName: "Pasu's Bistro",
+  subtitle: "Authentic Delights & Fusion Cuisine",
   categories: [
     {
-      categoryName: "Appetizers",
+      categoryName: "Starters",
       items: [
-        { id: "1", name: "Artisanal Garlic Bread", desc: "Toasted baguette with roasted garlic butter and herbs", price: "$6.99" },
-        { id: "2", name: "Crispy Calamari", desc: "Flash-fried squid served with house-made marinara sauce", price: "$12.50" },
-        { id: "3", name: "Stuffed Mushrooms", desc: "Button mushrooms stuffed with herbs, garlic, and cream cheese", price: "$9.99" },
-        { id: "4", name: "Bruschetta Classic", desc: "Grilled bread topped with tomatoes, basil, and olive oil", price: "$8.50" },
-        { id: "5", name: "Chicken Wings", desc: "Crispy wings tossed in spicy buffalo or honey barbecue sauce", price: "$11.99" },
-        { id: "6", name: "Spring Rolls", desc: "Crispy vegetable spring rolls served with sweet chili dip", price: "$7.99" }
+        { id: "s1", name: "Crispy Paneer Bites", desc: "Golden fried cottage cheese cubes served with spicy mint chutney", price: "₹220" },
+        { id: "s2", name: "Garlic Butter Mushrooms", desc: "Sautéed button mushrooms tossed in rich garlic butter and herbs", price: "₹240" }
       ]
     },
     {
-      categoryName: "Main Courses",
+      categoryName: "Main Course",
       items: [
-        { id: "7", name: "Artisanal Cheeseburger", desc: "Grass-fed beef patty with aged cheddar, lettuce, and house sauce", price: "$14.99" },
-        { id: "8", name: "Margherita Pizza", desc: "Fresh mozzarella, San Marzano tomatoes, and fresh basil", price: "$13.50" },
-        { id: "9", name: "Grilled Salmon", desc: "Atlantic salmon fillet served with lemon butter sauce and veggies", price: "$21.99" },
-        { id: "10", name: "Ribeye Steak 12oz", desc: "Prime aged ribeye served with garlic mashed potatoes", price: "$28.99" },
-        { id: "11", name: "Pasta Carbonara", desc: "Spaghetti tossed with pancetta, egg yolk, parmesan, and black pepper", price: "$16.50" },
-        { id: "12", name: "Chicken Alfredo", desc: "Fettuccine pasta in rich creamy parmesan alfredo sauce", price: "$17.99" },
-        { id: "13", name: "Vegetable Lasagna", desc: "Layered pasta with ricotta, mozzarella, and seasonal vegetables", price: "$15.00" },
-        { id: "14", name: "BBQ Pork Ribs", desc: "Slow-cooked tender pork ribs glazed in smoky barbecue sauce", price: "$23.50" },
-        { id: "15", name: "Lamb Chops", desc: "Pan-seared lamb chops infused with rosemary and garlic", price: "$26.99" },
-        { id: "16", name: "Seafood Paella", desc: "Saffron rice cooked with shrimp, mussels, squid, and herbs", price: "$24.99" }
+        { id: "m1", name: "Butter Chicken", desc: "Tender chicken cooked in a rich tomato, butter, and cashew sauce", price: "₹380" },
+        { id: "m2", name: "Dal Makhani", desc: "Slow-cooked black lentils simmered overnight with cream and butter", price: "₹280" }
       ]
     },
     {
-      categoryName: "Soups & Salads",
+      categoryName: "Beverages & Desserts",
       items: [
-        { id: "17", name: "Garden Salad", desc: "Mixed organic greens, cherry tomatoes, cucumbers, and balsamic dressing", price: "$9.99" },
-        { id: "18", name: "Caesar Salad", desc: "Crisp romaine, croutons, shaved parmesan, and Caesar dressing", price: "$10.50" },
-        { id: "19", name: "Greek Salad", desc: "Tomatoes, cucumbers, olives, red onion, and feta cheese", price: "$11.25" },
-        { id: "20", name: "Tomato Basil Soup", desc: "Rich roasted tomato soup served with crusty bread", price: "$6.50" },
-        { id: "21", name: "Clam Chowder", desc: "Creamy New England clam chowder with potatoes and celery", price: "$8.00" },
-        { id: "22", name: "Minestrone Soup", desc: "Classic Italian vegetable and pasta soup in light tomato broth", price: "$7.25" }
-      ]
-    },
-    {
-      categoryName: "Desserts",
-      items: [
-        { id: "23", name: "Tiramisu Classic", desc: "Traditional espresso-soaked ladyfingers with mascarpone cream", price: "$7.99" },
-        { id: "24", name: "New York Cheesecake", desc: "Creamy baked cheesecake with strawberry reduction", price: "$8.50" },
-        { id: "25", name: "Chocolate Lava Cake", desc: "Warm chocolate cake with molten center and vanilla ice cream", price: "$9.00" },
-        { id: "26", name: "Crème Brûlée", desc: "Vanilla bean custard topped with hard caramelized sugar", price: "$8.25" },
-        { id: "27", name: "Churros with Chocolate", desc: "Fried dough pastries dusted in cinnamon sugar with chocolate dip", price: "$6.99" }
-      ]
-    },
-    {
-      categoryName: "Beverages",
-      items: [
-        { id: "28", name: "Fresh Lemonade", desc: "Freshly squeezed lemon juice with mint leaves", price: "$3.99" },
-        { id: "29", name: "Iced Caramel Latte", desc: "Espresso with cold milk, caramel drizzle, and ice", price: "$4.99" },
-        { id: "30", name: "Sparkling Mineral Water", desc: "Imported 750ml glass bottle", price: "$4.50" },
-        { id: "31", name: "Matcha Green Tea", desc: "Ceremonial grade Japanese matcha steamed with milk", price: "$5.25" },
-        { id: "32", name: "Mango Smoothie", desc: "Blended fresh mangoes with yogurt and honey", price: "$5.50" }
+        { id: "d1", name: "Mango Lassi", desc: "Thick yogurt smoothie blended with fresh Alphonso mango pulp", price: "₹120" },
+        { id: "d2", name: "Gulab Jamun", desc: "Warm milk dumplings soaked in cardamom-infused sugar syrup", price: "₹100" }
       ]
     }
   ]
 };
 
-// Track active menu state & SSE connections
-let currentActiveMenu = masterMenu;
+let currentActiveMenu = { ...masterMenu, detectedLanguage: "English", isRTL: false };
 let sseClients = [];
-const translationCache = {};
 
-// SSE Route: Sends data live to web browsers
+// Serve main frontend webpage
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// SSE endpoint for live updates to the browser
 app.get('/events', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -103,8 +71,11 @@ app.get('/events', (req, res) => {
   });
 });
 
-// Hardware Translation Endpoint
-app.post('/api/translate', async (req, res) => {
+// Cache for storing previous translations
+const translationCache = {};
+
+// Hardware translation POST endpoint
+app.post('/api/translate', (req, res) => {
   const { input } = req.body;
 
   if (!input) {
@@ -113,25 +84,24 @@ app.post('/api/translate', async (req, res) => {
 
   const cacheKey = input.trim().toLowerCase();
 
-  // Return cached response to avoid hitting API rate limits
-  if (translationCache[cacheKey]) {
-    console.log(`[Cache Hit] Serving cached translation for: "${input}"`);
-    currentActiveMenu = translationCache[cacheKey];
-    
-    sseClients.forEach(client => {
-      client.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`);
-    });
+  // Return HTTP 200 immediately to ESP32 so the connection never times out
+  res.status(200).json({ 
+    success: true, 
+    message: "Translation queued successfully." 
+  });
 
-    return res.status(200).json({ 
-      success: true, 
-      detectedLanguage: currentActiveMenu.detectedLanguage,
-      cached: true 
-    });
-  }
+  // Background Processing
+  (async () => {
+    if (translationCache[cacheKey]) {
+      console.log(`[Cache Hit] Serving cached result for: "${input}"`);
+      currentActiveMenu = translationCache[cacheKey];
+      sseClients.forEach(client => client.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`));
+      return;
+    }
 
-  console.log(`[API Request] Processing translation via Gemini for: "${input}"`);
+    console.log(`[Gemini API Call] Translating menu for input: "${input}"`);
 
-  const promptText = `
+    const promptText = `
 Analyze this input text: "${input}". 
 Identify the target language from this input (it can be a language name, a phrase spoken in that language, or a request).
 Translate the full menu into that detected language.
@@ -142,72 +112,64 @@ Data:
 ${JSON.stringify(masterMenu)}
 `;
 
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: promptText,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'OBJECT',
-          properties: {
-            detectedLanguage: { type: 'STRING' },
-            restaurantName: { type: 'STRING' },
-            subtitle: { type: 'STRING' },
-            isRTL: { type: 'BOOLEAN' },
-            categories: {
-              type: 'ARRAY',
-              items: {
-                type: 'OBJECT',
-                properties: {
-                  categoryName: { type: 'STRING' },
-                  items: {
-                    type: 'ARRAY',
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents: promptText,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'OBJECT',
+            properties: {
+              detectedLanguage: { type: 'STRING' },
+              restaurantName: { type: 'STRING' },
+              subtitle: { type: 'STRING' },
+              isRTL: { type: 'BOOLEAN' },
+              categories: {
+                type: 'ARRAY',
+                items: {
+                  type: 'OBJECT',
+                  properties: {
+                    categoryName: { type: 'STRING' },
                     items: {
-                      type: 'OBJECT',
-                      properties: {
-                        id: { type: 'STRING' },
-                        name: { type: 'STRING' },
-                        desc: { type: 'STRING' },
-                        price: { type: 'STRING' }
-                      },
-                      required: ['id', 'name', 'desc', 'price']
+                      type: 'ARRAY',
+                      items: {
+                        type: 'OBJECT',
+                        properties: {
+                          id: { type: 'STRING' },
+                          name: { type: 'STRING' },
+                          desc: { type: 'STRING' },
+                          price: { type: 'STRING' }
+                        },
+                        required: ['id', 'name', 'desc', 'price']
+                      }
                     }
-                  }
-                },
-                required: ['categoryName', 'items']
+                  },
+                  required: ['categoryName', 'items']
+                }
               }
-            }
-          },
-          required: ['detectedLanguage', 'restaurantName', 'subtitle', 'isRTL', 'categories']
+            },
+            required: ['detectedLanguage', 'restaurantName', 'subtitle', 'isRTL', 'categories']
+          }
         }
-      }
-    });
+      });
 
-    const rawText = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text;
-    const translatedMenu = JSON.parse(rawText);
+      const rawText = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text;
+      const translatedMenu = JSON.parse(rawText);
 
-    // Save to cache
-    translationCache[cacheKey] = translatedMenu;
+      translationCache[cacheKey] = translatedMenu;
+      currentActiveMenu = translatedMenu;
 
-    currentActiveMenu = translatedMenu;
-    sseClients.forEach(client => {
-      client.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`);
-    });
+      // Broadcast update to all connected web pages
+      sseClients.forEach(client => client.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`));
+      console.log(`[Success] Menu updated to ${translatedMenu.detectedLanguage}`);
 
-    return res.status(200).json({ 
-      success: true, 
-      detectedLanguage: translatedMenu.detectedLanguage 
-    });
-
-  } catch (err) {
-    console.error("Gemini API Processing Error:", err);
-    return res.status(500).json({ error: "Translation request failed." });
-  }
+    } catch (err) {
+      console.error("Gemini API Error:", err.message);
+    }
+  })();
 });
 
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
