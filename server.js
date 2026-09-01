@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Safely initialize Gemini SDK
+// Initialize Gemini API SDK safely
 const apiKey = process.env.GEMINI_API_KEY;
 let ai = null;
 if (apiKey) {
@@ -23,10 +23,10 @@ if (apiKey) {
 app.use(cors());
 app.use(express.json());
 
-// Serve static frontend files from the public directory
+// Serve static frontend files from public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Master Menu Data with Multicultural Cuisines & High-Quality Images
+// Master Menu Data
 const masterMenu = {
   restaurantName: "PolyGlot menu",
   subtitle: "A World of Flavors — English, Indian, Chinese & Japanese Specialties",
@@ -113,12 +113,12 @@ const masterMenu = {
 let currentActiveMenu = { ...masterMenu, detectedLanguage: "English", isRTL: false };
 let sseClients = [];
 
-// Explicit root route serving index.html from public folder
+// Explicit root route serving index.html
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// SSE endpoint for live updates to browser UI
+// SSE endpoint for live updates
 app.get('/events', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -132,7 +132,7 @@ app.get('/events', (req, res) => {
   });
 });
 
-// Translation memory cache
+// Translation cache
 const translationCache = {};
 
 // Hardware POST API endpoint
@@ -143,13 +143,13 @@ app.post('/api/translate', (req, res) => {
     return res.status(400).json({ error: "Missing 'input' parameter in request body." });
   }
 
-  // Acknowledge hardware request immediately so ESP32 connection never times out
+  // Acknowledge hardware POST request immediately
   res.status(200).json({ 
     success: true, 
     message: "Translation queued successfully." 
   });
 
-  // Background translation processing with fallback models
+  // Background translation processing using gemini-3.6-flash
   (async () => {
     const cacheKey = input.trim().toLowerCase();
 
@@ -161,11 +161,11 @@ app.post('/api/translate', (req, res) => {
     }
 
     if (!ai) {
-      console.error("Gemini API call skipped: GEMINI_API_KEY environment variable is missing.");
+      console.error("Gemini API call skipped: GEMINI_API_KEY environment variable is not set.");
       return;
     }
 
-    console.log(`[Gemini API Call] Requesting translation for: "${input}"`);
+    console.log(`[Gemini API Call] Translating menu for input: "${input}"`);
 
     const promptText = `
 Analyze this input text: "${input}". 
@@ -178,86 +178,61 @@ Data:
 ${JSON.stringify(masterMenu)}
 `;
 
-    // Candidate models to attempt in order if high demand/503 errors occur
-    const candidateModels = ['gemini-2.5-flash', 'gemini-1.5-flash'];
-    let response = null;
-    let lastError = null;
-
-    for (const modelName of candidateModels) {
-      try {
-        console.log(`[Attempting Model] Trying ${modelName}...`);
-        response = await ai.models.generateContent({
-          model: modelName,
-          contents: promptText,
-          config: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: 'OBJECT',
-              properties: {
-                detectedLanguage: { type: 'STRING' },
-                restaurantName: { type: 'STRING' },
-                subtitle: { type: 'STRING' },
-                isRTL: { type: 'BOOLEAN' },
-                categories: {
-                  type: 'ARRAY',
-                  items: {
-                    type: 'OBJECT',
-                    properties: {
-                      categoryName: { type: 'STRING' },
-                      items: {
-                        type: 'ARRAY',
-                        items: {
-                          type: 'OBJECT',
-                          properties: {
-                            id: { type: 'STRING' },
-                            name: { type: 'STRING' },
-                            desc: { type: 'STRING' },
-                            price: { type: 'STRING' },
-                            image: { type: 'STRING' }
-                          },
-                          required: ['id', 'name', 'desc', 'price', 'image']
-                        }
-                      }
-                    },
-                    required: ['categoryName', 'items']
-                  }
-                }
-              },
-              required: ['detectedLanguage', 'restaurantName', 'subtitle', 'isRTL', 'categories']
-            }
-          }
-        });
-
-        if (response) {
-          console.log(`[Success] Received response from ${modelName}`);
-          break; // Exit loop on successful generation
-        }
-      } catch (err) {
-        console.warn(`[Model ${modelName} Failed]: ${err.message}`);
-        lastError = err;
-        // Wait 1 second before trying the fallback model
-        await new Promise(res => setTimeout(res, 1000));
-      }
-    }
-
-    if (!response) {
-      console.error("All Gemini model attempts failed:", lastError?.message);
-      return;
-    }
-
     try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents: promptText,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'OBJECT',
+            properties: {
+              detectedLanguage: { type: 'STRING' },
+              restaurantName: { type: 'STRING' },
+              subtitle: { type: 'STRING' },
+              isRTL: { type: 'BOOLEAN' },
+              categories: {
+                type: 'ARRAY',
+                items: {
+                  type: 'OBJECT',
+                  properties: {
+                    categoryName: { type: 'STRING' },
+                    items: {
+                      type: 'ARRAY',
+                      items: {
+                        type: 'OBJECT',
+                        properties: {
+                          id: { type: 'STRING' },
+                          name: { type: 'STRING' },
+                          desc: { type: 'STRING' },
+                          price: { type: 'STRING' },
+                          image: { type: 'STRING' }
+                        },
+                        required: ['id', 'name', 'desc', 'price', 'image']
+                      }
+                    }
+                  },
+                  required: ['categoryName', 'items']
+                }
+              }
+            },
+            required: ['detectedLanguage', 'restaurantName', 'subtitle', 'isRTL', 'categories']
+          }
+        }
+      });
+
       const rawText = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text;
       const translatedMenu = JSON.parse(rawText);
 
       translationCache[cacheKey] = translatedMenu;
       currentActiveMenu = translatedMenu;
 
-      // Broadcast new menu state to connected SSE browser clients
+      // Broadcast update to all connected SSE clients
       sseClients.forEach(client => client.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`));
       console.log(`[Success] Menu updated to ${translatedMenu.detectedLanguage}`);
 
-    } catch (parseErr) {
-      console.error("JSON Parsing Error:", parseErr.message);
+    } catch (err) {
+      console.error("Gemini API Error:", err.message);
     }
   })();
 });
