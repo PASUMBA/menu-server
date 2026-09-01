@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Safely initialize Gemini SDK
+// Initialize Gemini API SDK safely
 const apiKey = process.env.GEMINI_API_KEY;
 let ai = null;
 if (apiKey) {
@@ -26,30 +26,85 @@ app.use(express.json());
 // Serve static frontend files from the public folder
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Master Menu Data
+// Master Menu Data with Multicultural Cuisines & High-Quality Images
 const masterMenu = {
-  restaurantName: "Pasu's Bistro",
-  subtitle: "Authentic Delights & Fusion Cuisine",
+  restaurantName: "PolyGlot menu",
+  subtitle: "A World of Flavors — English, Indian, Chinese & Japanese Specialties",
   categories: [
     {
-      categoryName: "Starters",
+      categoryName: "English Classics",
       items: [
-        { id: "s1", name: "Crispy Paneer Bites", desc: "Golden fried cottage cheese cubes served with spicy mint chutney", price: "₹220" },
-        { id: "s2", name: "Garlic Butter Mushrooms", desc: "Sautéed button mushrooms tossed in rich garlic butter and herbs", price: "₹240" }
+        { 
+          id: "e1", 
+          name: "Fish and Chips", 
+          desc: "Beer-battered cod served with thick-cut golden fries, tartar sauce, and mushy peas", 
+          price: "£14.50",
+          image: "https://images.unsplash.com/photo-1579202673506-ca3ce28943ef?auto=format&fit=crop&w=300&q=80"
+        },
+        { 
+          id: "e2", 
+          name: "Full English Breakfast", 
+          desc: "Cumberland sausage, crispy bacon, fried eggs, grilled tomatoes, mushrooms, and baked beans", 
+          price: "£12.00",
+          image: "https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=300&q=80"
+        }
       ]
     },
     {
-      categoryName: "Main Course",
+      categoryName: "Indian Delights",
       items: [
-        { id: "m1", name: "Butter Chicken", desc: "Tender chicken cooked in a rich tomato, butter, and cashew sauce", price: "₹380" },
-        { id: "m2", name: "Dal Makhani", desc: "Slow-cooked black lentils simmered overnight with cream and butter", price: "₹280" }
+        { 
+          id: "i1", 
+          name: "Butter Chicken", 
+          desc: "Tender chicken cooked in a creamy tomato gravy infused with butter and aromatic spices", 
+          price: "₹380",
+          image: "https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?auto=format&fit=crop&w=300&q=80"
+        },
+        { 
+          id: "i2", 
+          name: "Paneer Tikka", 
+          desc: "Marinated cottage cheese cubes grilled in a traditional clay oven with capsicum and onions", 
+          price: "₹280",
+          image: "https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?auto=format&fit=crop&w=300&q=80"
+        }
       ]
     },
     {
-      categoryName: "Beverages & Desserts",
+      categoryName: "Chinese Specialties",
       items: [
-        { id: "d1", name: "Mango Lassi", desc: "Thick yogurt smoothie blended with fresh Alphonso mango pulp", price: "₹120" },
-        { id: "d2", name: "Gulab Jamun", desc: "Warm milk dumplings soaked in cardamom-infused sugar syrup", price: "₹100" }
+        { 
+          id: "c1", 
+          name: "Kung Pao Chicken", 
+          desc: "Stir-fried diced chicken with roasted peanuts, chili peppers, and Sichuan peppercorns", 
+          price: "¥58",
+          image: "https://images.unsplash.com/photo-1525755662778-989d0524087e?auto=format&fit=crop&w=300&q=80"
+        },
+        { 
+          id: "c2", 
+          name: "Dim Sum Basket", 
+          desc: "Assorted steamed dumplings filled with minced shrimp, pork, and fresh vegetables", 
+          price: "¥45",
+          image: "https://images.unsplash.com/photo-1496116218417-1a781b1c416c?auto=format&fit=crop&w=300&q=80"
+        }
+      ]
+    },
+    {
+      categoryName: "Japanese Delicacies",
+      items: [
+        { 
+          id: "j1", 
+          name: "Tonkotsu Ramen", 
+          desc: "Rich pork bone broth served with fresh noodles, tender chashu pork, and a soft-boiled egg", 
+          price: "¥1,200",
+          image: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&w=300&q=80"
+        },
+        { 
+          id: "j2", 
+          name: "Assorted Nigiri Sushi", 
+          desc: "Hand-pressed seasoned rice topped with fresh salmon, tuna, and yellowtail slices", 
+          price: "¥1,800",
+          image: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=300&q=80"
+        }
       ]
     }
   ]
@@ -58,12 +113,12 @@ const masterMenu = {
 let currentActiveMenu = { ...masterMenu, detectedLanguage: "English", isRTL: false };
 let sseClients = [];
 
-// Explicit root route pointing to public/index.html
+// Serve frontend from public/index.html
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// SSE endpoint for live updates to browser clients
+// SSE endpoint for live updates to browser UI
 app.get('/events', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -77,10 +132,10 @@ app.get('/events', (req, res) => {
   });
 });
 
-// In-memory translation cache
+// Translation memory cache
 const translationCache = {};
 
-// Hardware translation POST endpoint
+// Hardware POST API endpoint
 app.post('/api/translate', (req, res) => {
   const { input } = req.body;
 
@@ -88,13 +143,13 @@ app.post('/api/translate', (req, res) => {
     return res.status(400).json({ error: "Missing 'input' parameter in request body." });
   }
 
-  // Immediately respond HTTP 200 so the ESP32 connection never times out
+  // Acknowledge hardware request immediately to prevent connection timeouts
   res.status(200).json({ 
     success: true, 
     message: "Translation queued successfully." 
   });
 
-  // Background Processing
+  // Background translation processing
   (async () => {
     const cacheKey = input.trim().toLowerCase();
 
@@ -115,9 +170,9 @@ app.post('/api/translate', (req, res) => {
     const promptText = `
 Analyze this input text: "${input}". 
 Identify the target language from this input (it can be a language name, a phrase spoken in that language, or a request).
-Translate the full menu into that detected language.
+Translate the full menu into that detected language. Preserve exact dish image URLs and price strings without modification.
 
-Return raw JSON matching the required schema. Set 'isRTL' to true for right-to-left languages (e.g. Arabic, Hebrew, Urdu). Keep all price strings unchanged.
+Return raw JSON matching the required schema. Set 'isRTL' to true for right-to-left languages (e.g. Arabic, Hebrew, Urdu).
 
 Data:
 ${JSON.stringify(masterMenu)}
@@ -150,9 +205,10 @@ ${JSON.stringify(masterMenu)}
                           id: { type: 'STRING' },
                           name: { type: 'STRING' },
                           desc: { type: 'STRING' },
-                          price: { type: 'STRING' }
+                          price: { type: 'STRING' },
+                          image: { type: 'STRING' }
                         },
-                        required: ['id', 'name', 'desc', 'price']
+                        required: ['id', 'name', 'desc', 'price', 'image']
                       }
                     }
                   },
@@ -171,7 +227,7 @@ ${JSON.stringify(masterMenu)}
       translationCache[cacheKey] = translatedMenu;
       currentActiveMenu = translatedMenu;
 
-      // Broadcast update to all connected web interfaces
+      // Broadcast new menu state to connected SSE browser clients
       sseClients.forEach(client => client.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`));
       console.log(`[Success] Menu updated to ${translatedMenu.detectedLanguage}`);
 

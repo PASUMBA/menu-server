@@ -3,26 +3,187 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Live Menu Translation</title>
+  <title>PolyGlot menu</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f6f8; margin: 0; padding: 20px; color: #333; }
-    .container { max-width: 700px; margin: auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-    h1 { margin-top: 0; color: #1a1a1a; }
-    .badge { display: inline-block; background: #2563eb; color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; margin-bottom: 20px; }
-    .category-title { border-bottom: 2px solid #2563eb; padding-bottom: 5px; color: #2563eb; margin-top: 30px; }
-    .item { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; }
-    .item-info { max-width: 80%; }
-    .item-name { font-weight: bold; font-size: 1.05rem; }
-    .item-desc { font-size: 0.9rem; color: #666; margin-top: 4px; }
-    .item-price { font-weight: bold; color: #1a1a1a; }
-    .rtl { direction: rtl; text-align: right; }
+    :root {
+      --primary: #6366f1;
+      --primary-gradient: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+      --bg: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #10b981;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.1) 0px, transparent 50%);
+      background-attachment: fixed;
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 780px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+      position: relative;
+    }
+
+    .lang-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--primary-gradient);
+      color: #fff;
+      padding: 6px 16px;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.025em;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+      margin-bottom: 1.25rem;
+    }
+
+    .restaurant-name {
+      font-size: 2.75rem;
+      font-weight: 800;
+      background: linear-gradient(to right, #ffffff, #cbd5e1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.025em;
+      margin-bottom: 0.5rem;
+    }
+
+    .restaurant-subtitle {
+      color: var(--text-muted);
+      font-size: 1rem;
+      font-weight: 500;
+    }
+
+    .category-section {
+      margin-bottom: 2.5rem;
+    }
+
+    .category-title {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #818cf8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .category-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(to right, rgba(129, 140, 248, 0.3), transparent);
+    }
+
+    .menu-grid {
+      display: grid;
+      gap: 1.25rem;
+    }
+
+    .menu-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .menu-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(129, 140, 248, 0.3);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .dish-img {
+      width: 90px;
+      height: 90px;
+      border-radius: 12px;
+      object-fit: cover;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      flex-shrink: 0;
+    }
+
+    .item-details {
+      flex: 1;
+    }
+
+    .item-name {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-bottom: 0.35rem;
+    }
+
+    .item-desc {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .item-price {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent);
+      background: rgba(16, 185, 129, 0.1);
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      white-space: nowrap;
+    }
+
+    .rtl {
+      direction: rtl;
+      text-align: right;
+    }
+
+    .rtl .category-title::after {
+      background: linear-gradient(to left, rgba(129, 140, 248, 0.3), transparent);
+    }
+
+    .rtl .menu-card {
+      flex-direction: row-reverse;
+    }
   </style>
 </head>
 <body>
   <div class="container" id="menu-container">
-    <span class="badge" id="lang-badge">Detected Language: English</span>
-    <h1 id="restaurant-name">Loading Menu...</h1>
-    <p id="restaurant-subtitle"></p>
+    <div class="header">
+      <div class="lang-badge" id="lang-badge">
+        <span>🌐</span> <span id="lang-text">Detected Language: English</span>
+      </div>
+      <h1 class="restaurant-name" id="restaurant-name">PolyGlot menu</h1>
+      <p class="restaurant-subtitle" id="restaurant-subtitle">A World of Flavors — English, Indian, Chinese & Japanese Specialties</p>
+    </div>
+
     <div id="categories-container"></div>
   </div>
 
@@ -31,47 +192,55 @@
 
     evtSource.onmessage = function(event) {
       const data = JSON.parse(event.data);
-      console.log("Received menu update:", data);
-
       const container = document.getElementById("menu-container");
+
       if (data.isRTL) {
         container.classList.add("rtl");
       } else {
         container.classList.remove("rtl");
       }
 
-      document.getElementById("lang-badge").innerText = "Detected Language: " + (data.detectedLanguage || "English");
-      document.getElementById("restaurant-name").innerText = data.restaurantName || "Pasu's Bistro";
-      document.getElementById("restaurant-subtitle").innerText = data.subtitle || "";
+      document.getElementById("lang-text").innerText = "Detected Language: " + (data.detectedLanguage || "English");
+      document.getElementById("restaurant-name").innerText = data.restaurantName || "PolyGlot menu";
+      document.getElementById("restaurant-subtitle").innerText = data.subtitle || "A World of Flavors — English, Indian, Chinese & Japanese Specialties";
 
       const categoriesDiv = document.getElementById("categories-container");
       categoriesDiv.innerHTML = "";
 
       if (data.categories && data.categories.length > 0) {
         data.categories.forEach(cat => {
+          const section = document.createElement("div");
+          section.className = "category-section";
+
           const catHeader = document.createElement("h2");
           catHeader.className = "category-title";
           catHeader.innerText = cat.categoryName;
-          categoriesDiv.appendChild(catHeader);
+          section.appendChild(catHeader);
+
+          const grid = document.createElement("div");
+          grid.className = "menu-grid";
 
           cat.items.forEach(item => {
-            const itemDiv = document.createElement("div");
-            itemDiv.className = "item";
-            itemDiv.innerHTML = `
-              <div class="item-info">
+            const card = document.createElement("div");
+            card.className = "menu-card";
+            
+            const imageHtml = item.image ? `<img src="${item.image}" alt="${item.name}" class="dish-img">` : '';
+
+            card.innerHTML = `
+              ${imageHtml}
+              <div class="item-details">
                 <div class="item-name">${item.name}</div>
                 <div class="item-desc">${item.desc}</div>
               </div>
               <div class="item-price">${item.price}</div>
             `;
-            categoriesDiv.appendChild(itemDiv);
+            grid.appendChild(card);
           });
+
+          section.appendChild(grid);
+          categoriesDiv.appendChild(section);
         });
       }
-    };
-
-    evtSource.onerror = function(err) {
-      console.error("SSE Connection error:", err);
     };
   </script>
 </body>
