@@ -10,15 +10,21 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Initialize Gemini SDK
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Safely initialize Gemini SDK
+const apiKey = process.env.GEMINI_API_KEY;
+let ai = null;
+if (apiKey) {
+  ai = new GoogleGenAI({ apiKey });
+} else {
+  console.warn("WARNING: GEMINI_API_KEY environment variable is missing!");
+}
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// Serve static frontend files (if index.html is in the root directory)
-app.use(express.static(__dirname));
+// Serve static frontend files from the public folder
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Master Menu Data
 const masterMenu = {
@@ -52,12 +58,12 @@ const masterMenu = {
 let currentActiveMenu = { ...masterMenu, detectedLanguage: "English", isRTL: false };
 let sseClients = [];
 
-// Serve main frontend webpage
+// Explicit root route pointing to public/index.html
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// SSE endpoint for live updates to the browser
+// SSE endpoint for live updates to browser clients
 app.get('/events', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -71,7 +77,7 @@ app.get('/events', (req, res) => {
   });
 });
 
-// Cache for storing previous translations
+// In-memory translation cache
 const translationCache = {};
 
 // Hardware translation POST endpoint
@@ -82,9 +88,7 @@ app.post('/api/translate', (req, res) => {
     return res.status(400).json({ error: "Missing 'input' parameter in request body." });
   }
 
-  const cacheKey = input.trim().toLowerCase();
-
-  // Return HTTP 200 immediately to ESP32 so the connection never times out
+  // Immediately respond HTTP 200 so the ESP32 connection never times out
   res.status(200).json({ 
     success: true, 
     message: "Translation queued successfully." 
@@ -92,10 +96,17 @@ app.post('/api/translate', (req, res) => {
 
   // Background Processing
   (async () => {
+    const cacheKey = input.trim().toLowerCase();
+
     if (translationCache[cacheKey]) {
       console.log(`[Cache Hit] Serving cached result for: "${input}"`);
       currentActiveMenu = translationCache[cacheKey];
       sseClients.forEach(client => client.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`));
+      return;
+    }
+
+    if (!ai) {
+      console.error("Gemini API call skipped: GEMINI_API_KEY environment variable is not set.");
       return;
     }
 
@@ -160,7 +171,7 @@ ${JSON.stringify(masterMenu)}
       translationCache[cacheKey] = translatedMenu;
       currentActiveMenu = translatedMenu;
 
-      // Broadcast update to all connected web pages
+      // Broadcast update to all connected web interfaces
       sseClients.forEach(client => client.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`));
       console.log(`[Success] Menu updated to ${translatedMenu.detectedLanguage}`);
 
