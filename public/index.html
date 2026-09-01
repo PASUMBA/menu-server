@@ -3,122 +3,75 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Live AI Menu Display</title>
+  <title>Live Menu Translation</title>
   <style>
-    :root {
-      --bg: #0f172a;
-      --card-bg: #1e293b;
-      --text: #f8fafc;
-      --muted: #94a3b8;
-      --accent: #38bdf8;
-      --price: #4ade80;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: system-ui, -apple-system, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      padding: 2rem;
-      min-height: 100vh;
-    }
-    header { text-align: center; margin-bottom: 2rem; }
-    header h1 { font-size: 3rem; color: var(--accent); margin-bottom: 0.25rem; }
-    header p { font-size: 1.2rem; color: var(--muted); }
-    #lang-badge {
-      display: inline-block;
-      margin-top: 0.5rem;
-      padding: 0.25rem 0.75rem;
-      background: rgba(56, 189, 248, 0.1);
-      border: 1px solid var(--accent);
-      color: var(--accent);
-      border-radius: 1rem;
-      font-size: 0.85rem;
-    }
-    .category-section { margin-bottom: 2.5rem; }
-    .category-title {
-      font-size: 1.8rem;
-      border-bottom: 2px solid var(--accent);
-      padding-bottom: 0.5rem;
-      margin-bottom: 1.25rem;
-      color: var(--accent);
-    }
-    .menu-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 1.25rem;
-    }
-    .menu-card {
-      background: var(--card-bg);
-      border-radius: 0.75rem;
-      padding: 1.25rem;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-    .card-head { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
-    .item-name { font-size: 1.15rem; font-weight: 600; }
-    .item-price { font-size: 1.1rem; font-weight: 700; color: var(--price); white-space: nowrap; }
-    .item-desc { color: var(--muted); font-size: 0.9rem; line-height: 1.4; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f6f8; margin: 0; padding: 20px; color: #333; }
+    .container { max-width: 700px; margin: auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    h1 { margin-top: 0; color: #1a1a1a; }
+    .badge { display: inline-block; background: #2563eb; color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; margin-bottom: 20px; }
+    .category-title { border-bottom: 2px solid #2563eb; padding-bottom: 5px; color: #2563eb; margin-top: 30px; }
+    .item { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; }
+    .item-info { max-width: 80%; }
+    .item-name { font-weight: bold; font-size: 1.05rem; }
+    .item-desc { font-size: 0.9rem; color: #666; margin-top: 4px; }
+    .item-price { font-weight: bold; color: #1a1a1a; }
+    .rtl { direction: rtl; text-align: right; }
   </style>
 </head>
 <body>
-
-  <header>
-    <h1 id="rest-title">Grand Palace Bistro</h1>
-    <p id="rest-subtitle">Authentic Culinary Delights & Fresh Ingredients</p>
-    <div id="lang-badge">Language: English (Default)</div>
-  </header>
-
-  <main id="menu-container"></main>
+  <div class="container" id="menu-container">
+    <span class="badge" id="lang-badge">Detected Language: English</span>
+    <h1 id="restaurant-name">Loading Menu...</h1>
+    <p id="restaurant-subtitle"></p>
+    <div id="categories-container"></div>
+  </div>
 
   <script>
-    function renderMenu(data) {
-      document.getElementById('rest-title').innerText = data.restaurantName;
-      document.getElementById('rest-subtitle').innerText = data.subtitle;
-      document.getElementById('lang-badge').innerText = `Language: ${data.detectedLanguage || 'English (Default)'}`;
-      document.body.style.direction = data.isRTL ? 'rtl' : 'ltr';
+    const evtSource = new EventSource("/events");
 
-      const container = document.getElementById('menu-container');
-      container.innerHTML = '';
+    evtSource.onmessage = function(event) {
+      const data = JSON.parse(event.data);
+      console.log("Received menu update:", data);
 
-      if (!data.categories) return;
+      const container = document.getElementById("menu-container");
+      if (data.isRTL) {
+        container.classList.add("rtl");
+      } else {
+        container.classList.remove("rtl");
+      }
 
-      data.categories.forEach(cat => {
-        const section = document.createElement('section');
-        section.className = 'category-section';
+      document.getElementById("lang-badge").innerText = "Detected Language: " + (data.detectedLanguage || "English");
+      document.getElementById("restaurant-name").innerText = data.restaurantName || "Pasu's Bistro";
+      document.getElementById("restaurant-subtitle").innerText = data.subtitle || "";
 
-        const title = document.createElement('h2');
-        title.className = 'category-title';
-        title.innerText = cat.categoryName;
-        section.appendChild(title);
+      const categoriesDiv = document.getElementById("categories-container");
+      categoriesDiv.innerHTML = "";
 
-        const grid = document.createElement('div');
-        grid.className = 'menu-grid';
+      if (data.categories && data.categories.length > 0) {
+        data.categories.forEach(cat => {
+          const catHeader = document.createElement("h2");
+          catHeader.className = "category-title";
+          catHeader.innerText = cat.categoryName;
+          categoriesDiv.appendChild(catHeader);
 
-        cat.items.forEach(item => {
-          const card = document.createElement('div');
-          card.className = 'menu-card';
-          card.innerHTML = `
-            <div class="card-head">
-              <span class="item-name">${item.name}</span>
-              <span class="item-price">${item.price}</span>
-            </div>
-            <p class="item-desc">${item.desc}</p>
-          `;
-          grid.appendChild(card);
+          cat.items.forEach(item => {
+            const itemDiv = document.createElement("div");
+            itemDiv.className = "item";
+            itemDiv.innerHTML = `
+              <div class="item-info">
+                <div class="item-name">${item.name}</div>
+                <div class="item-desc">${item.desc}</div>
+              </div>
+              <div class="item-price">${item.price}</div>
+            `;
+            categoriesDiv.appendChild(itemDiv);
+          });
         });
+      }
+    };
 
-        section.appendChild(grid);
-        container.appendChild(section);
-      });
-    }
-
-    // Connect to Server-Sent Events for live automated updates
-    const events = new EventSource('/events');
-    events.onmessage = (event) => {
-      const updatedMenu = JSON.parse(event.data);
-      renderMenu(updatedMenu);
+    evtSource.onerror = function(err) {
+      console.error("SSE Connection error:", err);
     };
   </script>
 </body>
