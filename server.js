@@ -21,7 +21,7 @@ app.use(express.json());
 // Serve static files from 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Expanded Baseline Master Menu Data
+// Baseline Master Menu Data
 const masterMenu = {
   restaurantName: "PolyGlot menu",
   subtitle: "A World of Flavors — English, Indian, Chinese & Japanese Specialties",
@@ -187,23 +187,21 @@ app.post('/api/translate', (req, res) => {
     console.log(`[Gemini API Call] Translating menu for input: "${input}"`);
 
     const promptText = `
-    Analyze this input text: "${input}". 
-    Identify the target language from this input (language name, phrase, or request).
-    Translate the categoryName, item name, and item desc into that detected language. 
-    Keep dish image URLs, IDs, and price strings intact without modification.
-    Set 'detectedLanguage' to the name of the target language.
-    Set 'isRTL' to true ONLY if the language is written right-to-left (e.g. Arabic, Hebrew, Urdu). Otherwise false.
+Analyze this input text: "${input}". 
+Identify the target language from this input (it can be a language name, a phrase spoken in that language, or a request).
+Translate categoryName, item names, and item descs into that target language. 
+Preserve exact dish image URLs, IDs, and price strings without modification.
+Set 'detectedLanguage' to the name of the target language.
+Set 'isRTL' to true ONLY if the language is written right-to-left (e.g., Arabic, Hebrew, Urdu). Otherwise false.
 
-    Return ONLY a raw valid JSON object with keys: "restaurantName", "subtitle", "detectedLanguage", "isRTL", and "categories".
-
-    Master Menu JSON:
-    ${JSON.stringify(masterMenu)}
-    `;
+Return ONLY raw valid JSON matching this exact structure:
+${JSON.stringify(masterMenu)}
+`;
 
     try {
-      // Use active flash model with JSON response MIME type
+      // Use gemini-3.6-flash model
       const model = genAI.getGenerativeModel({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.6-flash",
         generationConfig: {
           responseMimeType: "application/json"
         }
