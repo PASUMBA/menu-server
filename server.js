@@ -157,6 +157,58 @@ app.get('/events', (req, res) => {
 
 const translationCache = {};
 
+// Translation core processor
+async function processTranslation(input) {
+  const cacheKey = input.trim().toLowerCase();
+
+  if (translationCache[cacheKey]) {
+    console.log(`[Cache Hit] Serving cached result for: "${input}"`);
+    currentActiveMenu = translationCache[cacheKey];
+    sseClients.forEach(client => client.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`));
+    return;
+  }
+
+  if (!genAI) {
+    console.error("Gemini API call skipped: GEMINI_API_KEY environment variable is missing.");
+    return;
+  }
+
+  console.log(`[Gemini API Call] Translating menu for input: "${input}"`);
+
+  const promptText = `
+Analyze this input text: "${input}". 
+Identify the target language from this input (it can be a language name, a phrase spoken in that language, or a request).
+Translate categoryName, item names, and item descs into that target language. 
+Preserve exact dish image URLs, IDs, and price strings without modification.
+Set 'detectedLanguage' to the name of the target language.
+Set 'isRTL' to true ONLY if the language is written right-to-left (e.g., Arabic, Hebrew, Urdu). Otherwise false.
+
+Return ONLY raw valid JSON matching this exact structure:
+${JSON.stringify(masterMenu)}
+`;
+
+  try {
+    const model = genAI.getGenerativeModel({
+      model: "gemini-3.6-flash",
+      generationConfig: {
+        responseMimeType: "application/json"
+      }
+    });
+
+    const result = await model.generateContent(promptText);
+    const translatedMenu = JSON.parse(result.response.text());
+
+    translationCache[cacheKey] = translatedMenu;
+    currentActiveMenu = translatedMenu;
+
+    sseClients.forEach(client => client.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`));
+    console.log(`[Success] Menu updated to ${translatedMenu.detectedLanguage}`);
+
+  } catch (err) {
+    console.error("Gemini API Error:", err.message);
+  }
+}
+
 app.post('/api/translate', (req, res) => {
   const { input } = req.body;
 
@@ -169,59 +221,18 @@ app.post('/api/translate', (req, res) => {
     message: "Translation request queued." 
   });
 
-  (async () => {
-    const cacheKey = input.trim().toLowerCase();
-
-    if (translationCache[cacheKey]) {
-      console.log(`[Cache Hit] Serving cached result for: "${input}"`);
-      currentActiveMenu = translationCache[cacheKey];
-      sseClients.forEach(client => client.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`));
-      return;
-    }
-
-    if (!genAI) {
-      console.error("Gemini API call skipped: GEMINI_API_KEY environment variable is missing.");
-      return;
-    }
-
-    console.log(`[Gemini API Call] Translating menu for input: "${input}"`);
-
-    const promptText = `
-Analyze this input text: "${input}". 
-Identify the target language from this input (it can be a language name, a phrase spoken in that language, or a request).
-Translate categoryName, item names, and item descs into that target language. 
-Preserve exact dish image URLs, IDs, and price strings without modification.
-Set 'detectedLanguage' to the name of the target language.
-Set 'isRTL' to true ONLY if the language is written right-to-left (e.g., Arabic, Hebrew, Urdu). Otherwise false.
-
-Return ONLY raw valid JSON matching this exact structure:
-${JSON.stringify(masterMenu)}
-`;
-
-    try {
-      // Use gemini-3.6-flash model
-      const model = genAI.getGenerativeModel({
-        model: "gemini-3.6-flash",
-        generationConfig: {
-          responseMimeType: "application/json"
-        }
-      });
-
-      const result = await model.generateContent(promptText);
-      const translatedMenu = JSON.parse(result.response.text());
-
-      translationCache[cacheKey] = translatedMenu;
-      currentActiveMenu = translatedMenu;
-
-      sseClients.forEach(client => client.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`));
-      console.log(`[Success] Menu updated to ${translatedMenu.detectedLanguage}`);
-
-    } catch (err) {
-      console.error("Gemini API Error:", err.message);
-    }
-  })();
+  processTranslation(input);
 });
 
 app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
+
+  // =========================================================
+  // AUTOMATIC DEMO TRIGGER: Translates to Hindi 10 seconds after launch
+  // =========================================================
+  console.log("Scheduling automatic Hindi translation in 10 seconds...");
+  setTimeout(() => {
+    console.log("\n[Demo Trigger] 10 seconds elapsed. Auto-triggering Hindi translation...");
+    processTranslation("Hindi");
+  }, 10000);
 });
