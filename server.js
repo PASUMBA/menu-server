@@ -1,279 +1,237 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Digital Signage Menu Display</title>
-  <style>
-    /* Absolute reset for digital screen displays */
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      user-select: none;
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Initialize Gemini API SDK
+const apiKey = process.env.GEMINI_API_KEY;
+let genAI = null;
+if (apiKey) {
+  genAI = new GoogleGenerativeAI(apiKey);
+} else {
+  console.warn("WARNING: GEMINI_API_KEY environment variable is missing!");
+}
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Serve static frontend files from 'public' directory
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Master Menu Data
+const masterMenu = {
+  restaurantName: "PolyGlot menu",
+  subtitle: "A World of Flavors — English, Indian, Chinese & Japanese Specialties",
+  categories: [
+    {
+      categoryName: "English Classics",
+      items: [
+        { 
+          id: "e1", 
+          name: "Fish and Chips", 
+          desc: "Beer-battered cod served with thick-cut golden fries, tartar sauce, and mushy peas", 
+          price: "£14.50",
+          image: "https://images.unsplash.com/photo-1579202673506-ca3ce28943ef?auto=format&fit=crop&w=300&q=80"
+        },
+        { 
+          id: "e2", 
+          name: "Full English Breakfast", 
+          desc: "Cumberland sausage, crispy bacon, fried eggs, grilled tomatoes, mushrooms, and baked beans", 
+          price: "£12.00",
+          image: "https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=300&q=80"
+        }
+      ]
+    },
+    {
+      categoryName: "Indian Delights",
+      items: [
+        { 
+          id: "i1", 
+          name: "Butter Chicken", 
+          desc: "Tender chicken cooked in a creamy tomato gravy infused with butter and aromatic spices", 
+          price: "₹380",
+          image: "https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?auto=format&fit=crop&w=300&q=80"
+        },
+        { 
+          id: "i2", 
+          name: "Paneer Tikka", 
+          desc: "Marinated cottage cheese cubes grilled in a traditional clay oven with capsicum and onions", 
+          price: "₹280",
+          image: "https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?auto=format&fit=crop&w=300&q=80"
+        }
+      ]
+    },
+    {
+      categoryName: "Chinese Specialties",
+      items: [
+        { 
+          id: "c1", 
+          name: "Kung Pao Chicken", 
+          desc: "Stir-fried diced chicken with roasted peanuts, chili peppers, and Sichuan peppercorns", 
+          price: "¥58",
+          image: "https://images.unsplash.com/photo-1525755662778-989d0524087e?auto=format&fit=crop&w=300&q=80"
+        },
+        { 
+          id: "c2", 
+          name: "Dim Sum Basket", 
+          desc: "Assorted steamed dumplings filled with minced shrimp, pork, and fresh vegetables", 
+          price: "¥45",
+          image: "https://images.unsplash.com/photo-1496116218417-1a781b1c416c?auto=format&fit=crop&w=300&q=80"
+        }
+      ]
+    },
+    {
+      categoryName: "Japanese Delicacies",
+      items: [
+        { 
+          id: "j1", 
+          name: "Tonkotsu Ramen", 
+          desc: "Rich pork bone broth served with fresh noodles, tender chashu pork, and a soft-boiled egg", 
+          price: "¥1,200",
+          image: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&w=300&q=80"
+        },
+        { 
+          id: "j2", 
+          name: "Assorted Nigiri Sushi", 
+          desc: "Hand-pressed seasoned rice topped with fresh salmon, tuna, and yellowtail slices", 
+          price: "¥1,800",
+          image: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=300&q=80"
+        }
+      ]
+    }
+  ]
+};
+
+let currentActiveMenu = { ...masterMenu, detectedLanguage: "English", isRTL: false };
+let sseClients = [];
+
+// Explicit root route serving index.html
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// SSE endpoint for live updates
+app.get('/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  sseClients.push(res);
+  res.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`);
+
+  req.on('close', () => {
+    sseClients = sseClients.filter(client => client !== res);
+  });
+});
+
+// Translation cache
+const translationCache = {};
+
+// Hardware POST API endpoint
+app.post('/api/translate', (req, res) => {
+  const { input } = req.body;
+
+  if (!input) {
+    return res.status(400).json({ error: "Missing 'input' parameter in request body." });
+  }
+
+  // Acknowledge hardware POST request immediately
+  res.status(200).json({ 
+    success: true, 
+    message: "Translation queued successfully." 
+  });
+
+  // Background translation processing using Gemini
+  (async () => {
+    const cacheKey = input.trim().toLowerCase();
+
+    if (translationCache[cacheKey]) {
+      console.log(`[Cache Hit] Serving cached result for: "${input}"`);
+      currentActiveMenu = translationCache[cacheKey];
+      sseClients.forEach(client => client.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`));
+      return;
     }
 
-    html, body {
-      width: 100vw;
-      height: 100vh;
-      overflow: hidden; /* Strict zero-scrolling guarantee */
-      background-color: #0b0f17;
-      color: #f8fafc;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    if (!genAI) {
+      console.error("Gemini API call skipped: GEMINI_API_KEY environment variable is not set.");
+      return;
     }
 
-    /* Master Board Container */
-    #board {
-      display: flex;
-      flex-direction: column;
-      width: 100vw;
-      height: 100vh;
-      padding: 2rem 2.5rem;
+    console.log(`[Gemini API Call] Translating menu for input: "${input}"`);
+
+    const promptText = `
+Analyze this input text: "${input}". 
+Identify the target language from this input (it can be a language name, a phrase spoken in that language, or a request).
+Translate the full menu into that detected language. Preserve exact dish image URLs and price strings without modification.
+
+Return raw JSON matching the required schema. Set 'isRTL' to true for right-to-left languages (e.g. Arabic, Hebrew, Urdu).
+
+Data:
+${JSON.stringify(masterMenu)}
+`;
+
+    try {
+      const model = genAI.getGenerativeModel({
+        model: "gemini-1.5-flash",
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: SchemaType.OBJECT,
+            properties: {
+              detectedLanguage: { type: SchemaType.STRING },
+              restaurantName: { type: SchemaType.STRING },
+              subtitle: { type: SchemaType.STRING },
+              isRTL: { type: SchemaType.BOOLEAN },
+              categories: {
+                type: SchemaType.ARRAY,
+                items: {
+                  type: SchemaType.OBJECT,
+                  properties: {
+                    categoryName: { type: SchemaType.STRING },
+                    items: {
+                      type: SchemaType.ARRAY,
+                      items: {
+                        type: SchemaType.OBJECT,
+                        properties: {
+                          id: { type: SchemaType.STRING },
+                          name: { type: SchemaType.STRING },
+                          desc: { type: SchemaType.STRING },
+                          price: { type: SchemaType.STRING },
+                          image: { type: SchemaType.STRING }
+                        },
+                        required: ['id', 'name', 'desc', 'price', 'image']
+                      }
+                    }
+                  },
+                  required: ['categoryName', 'items']
+                }
+              }
+            },
+            required: ['detectedLanguage', 'restaurantName', 'subtitle', 'isRTL', 'categories']
+          }
+        }
+      });
+
+      const result = await model.generateContent(promptText);
+      const translatedMenu = JSON.parse(result.response.text());
+
+      translationCache[cacheKey] = translatedMenu;
+      currentActiveMenu = translatedMenu;
+
+      // Broadcast update to all connected SSE clients
+      sseClients.forEach(client => client.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`));
+      console.log(`[Success] Menu updated to ${translatedMenu.detectedLanguage}`);
+
+    } catch (err) {
+      console.error("Gemini API Error:", err.message);
     }
+  })();
+});
 
-    /* Header Section */
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding-bottom: 1.25rem;
-      border-bottom: 2px solid #1e293b;
-      margin-bottom: 1.5rem;
-      flex-shrink: 0;
-    }
-
-    .title-group {
-      display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-    }
-
-    .brand-title {
-      font-size: 2.5rem;
-      font-weight: 800;
-      color: #fbbf24;
-      letter-spacing: -0.02em;
-      text-transform: uppercase;
-    }
-
-    .brand-subtitle {
-      font-size: 1rem;
-      color: #94a3b8;
-    }
-
-    .subtitle-badge {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      background-color: #1e293b;
-      border: 1px solid #334155;
-      padding: 0.5rem 1.25rem;
-      border-radius: 9999px;
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: #38bdf8;
-    }
-
-    .live-dot {
-      width: 10px;
-      height: 10px;
-      background-color: #22c55e;
-      border-radius: 50%;
-      box-shadow: 0 0 8px #22c55e;
-    }
-
-    /* Full-Bleed Grid for Menu Columns */
-    .grid-container {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1.5rem;
-      flex-grow: 1;
-      height: 100%;
-      overflow: hidden;
-    }
-
-    .category-card {
-      background: rgba(30, 41, 59, 0.4);
-      border: 1px solid #1e293b;
-      border-radius: 16px;
-      padding: 1.25rem;
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-    }
-
-    .category-title {
-      font-size: 1.4rem;
-      font-weight: 700;
-      color: #38bdf8;
-      margin-bottom: 1rem;
-      border-bottom: 1px solid #334155;
-      padding-bottom: 0.5rem;
-      text-transform: capitalize;
-    }
-
-    /* Item rows layout */
-    .item-list {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-      justify-content: flex-start;
-    }
-
-    .menu-item {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-    }
-
-    .item-img {
-      width: 56px;
-      height: 56px;
-      border-radius: 8px;
-      object-fit: cover;
-      flex-shrink: 0;
-      border: 1px solid #334155;
-    }
-
-    .item-details {
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-    }
-
-    .item-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 0.5rem;
-    }
-
-    .item-name {
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: #f1f5f9;
-    }
-
-    .item-price {
-      font-size: 1.15rem;
-      font-weight: 700;
-      color: #fbbf24;
-      white-space: nowrap;
-    }
-
-    .item-desc {
-      font-size: 0.85rem;
-      color: #94a3b8;
-      margin-top: 0.2rem;
-      line-height: 1.25;
-    }
-
-    /* Right-To-Left (RTL) Auto-Layout */
-    body.rtl {
-      direction: rtl;
-    }
-  </style>
-</head>
-<body>
-
-  <div id="board">
-    <header class="header">
-      <div class="title-group">
-        <h1 class="brand-title" id="restaurant-name">PolyGlot menu</h1>
-        <p class="brand-subtitle" id="restaurant-subtitle">Loading Menu...</p>
-      </div>
-      <div class="subtitle-badge">
-        <span class="live-dot"></span>
-        <span id="detected-language">English</span>
-      </div>
-    </header>
-
-    <main class="grid-container" id="menu-grid">
-      <!-- Dynamically populated via SSE without page reload -->
-    </main>
-  </div>
-
-  <script>
-    const restaurantNameEl = document.getElementById('restaurant-name');
-    const restaurantSubtitleEl = document.getElementById('restaurant-subtitle');
-    const languageBadgeEl = document.getElementById('detected-language');
-    const menuGridEl = document.getElementById('menu-grid');
-
-    // Render Menu Cards with flexible fallback properties
-    function renderMenu(data) {
-      if (!data) return;
-
-      // Update RTL body direction
-      if (data.isRTL) {
-        document.body.classList.add('rtl');
-      } else {
-        document.body.classList.remove('rtl');
-      }
-
-      // Update Header Text
-      restaurantNameEl.textContent = data.restaurantName || "PolyGlot menu";
-      restaurantSubtitleEl.textContent = data.subtitle || "";
-      languageBadgeEl.textContent = data.detectedLanguage || data.language || "English";
-
-      // Clear current grid
-      menuGridEl.innerHTML = '';
-
-      const categories = data.categories || data.menu || data.items;
-
-      if (categories && Array.isArray(categories)) {
-        categories.forEach(cat => {
-          const card = document.createElement('div');
-          card.className = 'category-card';
-
-          const title = cat.categoryName || cat.name || cat.category || "Items";
-          const itemsList = cat.items || [];
-
-          let itemsHTML = '';
-          itemsList.forEach(item => {
-            const itemName = item.name || item.title || "";
-            const itemDesc = item.desc || item.description || "";
-            const itemPrice = item.price || "";
-            const itemImg = item.image || "";
-
-            itemsHTML += `
-              <div class="menu-item">
-                ${itemImg ? `<img src="${itemImg}" class="item-img" alt="${itemName}">` : ''}
-                <div class="item-details">
-                  <div class="item-header">
-                    <span class="item-name">${itemName}</span>
-                    <span class="item-price">${itemPrice}</span>
-                  </div>
-                  <span class="item-desc">${itemDesc}</span>
-                </div>
-              </div>
-            `;
-          });
-
-          card.innerHTML = `
-            <h2 class="category-title">${title}</h2>
-            <div class="item-list">${itemsHTML}</div>
-          `;
-
-          menuGridEl.appendChild(card);
-        });
-      }
-    }
-
-    // Connect to matched backend SSE endpoint (/events)
-    const evtSource = new EventSource('/events');
-
-    evtSource.onmessage = function(event) {
-      try {
-        const updatedMenu = JSON.parse(event.data);
-        renderMenu(updatedMenu);
-      } catch (err) {
-        console.error("Error parsing menu update:", err);
-      }
-    };
-
-    evtSource.onerror = function(err) {
-      console.warn("SSE connection interrupted. Reconnecting automatically...");
-    };
-  </script>
-</body>
-</html>
+app.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
+});
