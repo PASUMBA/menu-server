@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -187,55 +187,25 @@ app.post('/api/translate', (req, res) => {
     console.log(`[Gemini API Call] Translating menu for input: "${input}"`);
 
     const promptText = `
-Analyze this input text: "${input}". 
-Identify the target language from this input (language name, phrase, or request).
-Translate the menu into that detected language. Keep dish image URLs and price strings intact without modification.
+    Analyze this input text: "${input}". 
+    Identify the target language from this input (language name, phrase, or request).
+    Translate the categoryName, item name, and item desc into that detected language. 
+    Keep dish image URLs, IDs, and price strings intact without modification.
+    Set 'detectedLanguage' to the name of the target language.
+    Set 'isRTL' to true ONLY if the language is written right-to-left (e.g. Arabic, Hebrew, Urdu). Otherwise false.
 
-Return raw JSON matching the required schema. Set 'isRTL' to true for right-to-left scripts.
+    Return ONLY a raw valid JSON object with keys: "restaurantName", "subtitle", "detectedLanguage", "isRTL", and "categories".
 
-Data:
-${JSON.stringify(masterMenu)}
-`;
+    Master Menu JSON:
+    ${JSON.stringify(masterMenu)}
+    `;
 
     try {
+      // Use active flash model with JSON response MIME type
       const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash",
         generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: SchemaType.OBJECT,
-            properties: {
-              detectedLanguage: { type: SchemaType.STRING },
-              restaurantName: { type: SchemaType.STRING },
-              subtitle: { type: SchemaType.STRING },
-              isRTL: { type: SchemaType.BOOLEAN },
-              categories: {
-                type: SchemaType.ARRAY,
-                items: {
-                  type: SchemaType.OBJECT,
-                  properties: {
-                    categoryName: { type: SchemaType.STRING },
-                    items: {
-                      type: SchemaType.ARRAY,
-                      items: {
-                        type: SchemaType.OBJECT,
-                        properties: {
-                          id: { type: SchemaType.STRING },
-                          name: { type: SchemaType.STRING },
-                          desc: { type: SchemaType.STRING },
-                          price: { type: SchemaType.STRING },
-                          image: { type: SchemaType.STRING }
-                        },
-                        required: ['id', 'name', 'desc', 'price', 'image']
-                      }
-                    }
-                  },
-                  required: ['categoryName', 'items']
-                }
-              }
-            },
-            required: ['detectedLanguage', 'restaurantName', 'subtitle', 'isRTL', 'categories']
-          }
+          responseMimeType: "application/json"
         }
       });
 
