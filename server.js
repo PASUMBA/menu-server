@@ -21,7 +21,7 @@ app.use(express.json());
 // Serve static files from 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Baseline Master Menu Data
+// Expanded Baseline Master Menu Data
 const masterMenu = {
   restaurantName: "PolyGlot menu",
   subtitle: "A World of Flavors — English, Indian, Chinese & Japanese Specialties",
@@ -44,6 +44,13 @@ const masterMenu = {
           desc: "Cumberland sausage, crispy bacon, fried eggs, grilled tomatoes, mushrooms, and baked beans", 
           price: "£12.00",
           image: "https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=300&q=80"
+        },
+        { 
+          id: "e3", 
+          name: "Shepherd's Pie", 
+          desc: "Minced lamb with garden vegetables topped with toasted golden mashed potato crust", 
+          price: "£13.50",
+          image: "https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=300&q=80"
         }
       ]
     },
@@ -63,6 +70,13 @@ const masterMenu = {
           desc: "Marinated cottage cheese cubes grilled in a traditional clay oven with capsicum and onions", 
           price: "₹280",
           image: "https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?auto=format&fit=crop&w=300&q=80"
+        },
+        { 
+          id: "i3", 
+          name: "Garlic Butter Naan", 
+          desc: "Freshly baked leavened flatbread brushed with garlic butter and cilantro", 
+          price: "₹80",
+          image: "https://images.unsplash.com/photo-1626074353765-517a681e40be?auto=format&fit=crop&w=300&q=80"
         }
       ]
     },
@@ -82,6 +96,13 @@ const masterMenu = {
           desc: "Assorted steamed dumplings filled with minced shrimp, pork, and fresh vegetables", 
           price: "¥45",
           image: "https://images.unsplash.com/photo-1496116218417-1a781b1c416c?auto=format&fit=crop&w=300&q=80"
+        },
+        { 
+          id: "c3", 
+          name: "Yangzhou Fried Rice", 
+          desc: "Wok-fried jasmine rice with prawns, diced BBQ pork, scrambled egg, and green peas", 
+          price: "¥48",
+          image: "https://images.unsplash.com/photo-1603133872878-684f208fb84b?auto=format&fit=crop&w=300&q=80"
         }
       ]
     },
@@ -101,6 +122,13 @@ const masterMenu = {
           desc: "Hand-pressed seasoned rice topped with fresh salmon, tuna, and yellowtail slices", 
           price: "¥1,800",
           image: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=300&q=80"
+        },
+        { 
+          id: "j3", 
+          name: "Matcha Ice Cream", 
+          desc: "Authentic Japanese green tea ice cream served with sweet red bean paste", 
+          price: "¥500",
+          image: "https://images.unsplash.com/photo-1505394033641-40c6ad1178d7?auto=format&fit=crop&w=300&q=80"
         }
       ]
     }
@@ -110,20 +138,16 @@ const masterMenu = {
 let currentActiveMenu = JSON.parse(JSON.stringify(masterMenu));
 let sseClients = [];
 
-// Explicit root route serving index.html
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// SSE endpoint for display streaming
 app.get('/events', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
   sseClients.push(res);
-
-  // Send baseline/active state immediately upon connecting
   res.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`);
 
   req.on('close', () => {
@@ -131,10 +155,8 @@ app.get('/events', (req, res) => {
   });
 });
 
-// Translation cache
 const translationCache = {};
 
-// Hardware trigger endpoint
 app.post('/api/translate', (req, res) => {
   const { input } = req.body;
 
@@ -142,13 +164,11 @@ app.post('/api/translate', (req, res) => {
     return res.status(400).json({ error: "Missing 'input' parameter in request body." });
   }
 
-  // Acknowledge ESP32 hardware trigger immediately
   res.status(200).json({ 
     success: true, 
     message: "Translation request queued." 
   });
 
-  // Background translation process
   (async () => {
     const cacheKey = input.trim().toLowerCase();
 
@@ -225,7 +245,6 @@ ${JSON.stringify(masterMenu)}
       translationCache[cacheKey] = translatedMenu;
       currentActiveMenu = translatedMenu;
 
-      // Push SSE update to all connected screens
       sseClients.forEach(client => client.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`));
       console.log(`[Success] Menu updated to ${translatedMenu.detectedLanguage}`);
 
