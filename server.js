@@ -105,11 +105,11 @@ async function translateMenuWithGemini(targetLanguage) {
 
   // Target gemini-3.6-flash model
   const model = genAI.getGenerativeModel({
-    model: "gemini-3.6-flash",
-    generationConfig: {
-      responseMimeType: "application/json"
-    }
-  });
+  model: "gemini-1.5-flash",
+  generationConfig: {
+    responseMimeType: "application/json"
+  }
+});
 
   const prompt = `
     You are a professional restaurant menu translator. 
