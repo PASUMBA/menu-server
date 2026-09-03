@@ -1,183 +1,241 @@
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+import express from 'express';
+import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Enable CORS & JSON Request Body Parsing
+// Initialize Gemini API SDK
+const apiKey = process.env.GEMINI_API_KEY;
+let genAI = null;
+if (apiKey) {
+  genAI = new GoogleGenerativeAI(apiKey);
+} else {
+  console.warn("WARNING: GEMINI_API_KEY environment variable is missing!");
+}
+
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Serve Static Frontend Files from 'public' directory
+// Serve static frontend files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Initialize Google Gemini API
-const apiKey = process.env.GEMINI_API_KEY;
-const genAI = new GoogleGenerativeAI(apiKey);
-
-// Master English Menu (Default Baseline State)
+// Master Menu Data
 const masterMenu = {
-  restaurantName: "PASU BISTRO",
-  detectedLanguage: "English",
-  isRTL: false,
+  restaurantName: "PolyGlot menu",
+  subtitle: "A World of Flavors — English, Indian, Chinese & Japanese Specialties",
   categories: [
     {
-      categoryName: "Starters",
+      categoryName: "English Classics",
       items: [
-        { name: "Crispy Spring Rolls", desc: "Fresh vegetable filling with sweet chili dip", price: "$6.99" },
-        { name: "Garlic Bread", desc: "Toasted baguette slices with garlic herb butter", price: "$4.99" },
-        { name: "Soup of the Day", desc: "Chef's special daily fresh soup", price: "$5.50" }
+        { 
+          id: "e1", 
+          name: "Fish and Chips", 
+          desc: "Beer-battered cod served with thick-cut golden fries, tartar sauce, and mushy peas", 
+          price: "£14.50",
+          image: "https://images.unsplash.com/photo-1579202673506-ca3ce28943ef?auto=format&fit=crop&w=300&q=80"
+        },
+        { 
+          id: "e2", 
+          name: "Full English Breakfast", 
+          desc: "Cumberland sausage, crispy bacon, fried eggs, grilled tomatoes, mushrooms, and baked beans", 
+          price: "£12.00",
+          image: "https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=300&q=80"
+        }
       ]
     },
     {
-      categoryName: "Main Course",
+      categoryName: "Indian Delights",
       items: [
-        { name: "Grilled Chicken Burger", desc: "Juicy chicken patty, lettuce, cheddar & fries", price: "$12.99" },
-        { name: "Margherita Pizza", desc: "Classic mozzarella, fresh basil, sweet tomato sauce", price: "$14.50" },
-        { name: "Creamy Pasta Alfredo", desc: "Penne pasta in rich parmesan cream sauce", price: "$13.99" }
+        { 
+          id: "i1", 
+          name: "Butter Chicken", 
+          desc: "Tender chicken cooked in a creamy tomato gravy infused with butter and aromatic spices", 
+          price: "₹380",
+          image: "https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?auto=format&fit=crop&w=300&q=80"
+        },
+        { 
+          id: "i2", 
+          name: "Paneer Tikka", 
+          desc: "Marinated cottage cheese cubes grilled in a traditional clay oven with capsicum and onions", 
+          price: "₹280",
+          image: "https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?auto=format&fit=crop&w=300&q=80"
+        }
       ]
     },
     {
-      categoryName: "Beverages",
+      categoryName: "Chinese Specialties",
       items: [
-        { name: "Iced Cold Brew", desc: "Slow-steeped organic coffee beans over ice", price: "$3.99" },
-        { name: "Fresh Mango Smoothie", desc: "Blended real mangoes and yogurt", price: "$4.50" },
-        { name: "Sparkling Lemonade", desc: "Hand-pressed lemons with sparkling soda", price: "$3.50" }
+        { 
+          id: "c1", 
+          name: "Kung Pao Chicken", 
+          desc: "Stir-fried diced chicken with roasted peanuts, chili peppers, and Sichuan peppercorns", 
+          price: "¥58",
+          image: "https://images.unsplash.com/photo-1525755662778-989d0524087e?auto=format&fit=crop&w=300&q=80"
+        },
+        { 
+          id: "c2", 
+          name: "Dim Sum Basket", 
+          desc: "Assorted steamed dumplings filled with minced shrimp, pork, and fresh vegetables", 
+          price: "¥45",
+          image: "https://images.unsplash.com/photo-1496116218417-1a781b1c416c?auto=format&fit=crop&w=300&q=80"
+        }
+      ]
+    },
+    {
+      categoryName: "Japanese Delicacies",
+      items: [
+        { 
+          id: "j1", 
+          name: "Tonkotsu Ramen", 
+          desc: "Rich pork bone broth served with fresh noodles, tender chashu pork, and a soft-boiled egg", 
+          price: "¥1,200",
+          image: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&w=300&q=80"
+        },
+        { 
+          id: "j2", 
+          name: "Assorted Nigiri Sushi", 
+          desc: "Hand-pressed seasoned rice topped with fresh salmon, tuna, and yellowtail slices", 
+          price: "¥1,800",
+          image: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=300&q=80"
+        }
       ]
     }
   ]
 };
 
-// Current State in RAM
-let currentMenuState = JSON.parse(JSON.stringify(masterMenu));
-
-// In-Memory Translation Cache (Saves Gemini API tokens)
-const translationCache = {
-  "English": JSON.parse(JSON.stringify(masterMenu))
-};
-
-// Active SSE Client Connections
+let currentActiveMenu = { ...masterMenu, detectedLanguage: "English", isRTL: false };
 let sseClients = [];
 
-// ==========================================
-// 1. SSE Endpoint (Pushes updates to browser)
-// ==========================================
-app.get('/api/events', (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-
-  // CRITICAL: Send initial menu state immediately on connection
-  res.write(`data: ${JSON.stringify(currentMenuState)}\n\n`);
-
-  // Track new client
-  const clientId = Date.now();
-  const newClient = { id: clientId, res };
-  sseClients.push(newClient);
-
-  req.on('close', () => {
-    sseClients = sseClients.filter(c => c.id !== clientId);
-  });
-});
-
-// Broadcast updated state to all connected screen displays
-function broadcastMenuUpdate(menuData) {
-  currentMenuState = menuData;
-  sseClients.forEach(client => {
-    client.res.write(`data: ${JSON.stringify(currentMenuState)}\n\n`);
-  });
-}
-
-// ==========================================
-// 2. Gemini Translation Core Function
-// ==========================================
-async function translateMenuWithGemini(targetLanguage) {
-  // Return cached result if already translated previously
-  if (translationCache[targetLanguage]) {
-    console.log(`[Cache Hit] Serving '${targetLanguage}' from memory.`);
-    return translationCache[targetLanguage];
-  }
-
-  console.log(`[API Call] Querying Gemini 3.6-flash for translation to '${targetLanguage}'...`);
-
-  // Target gemini-3.6-flash model
-  const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash",
-  generationConfig: {
-    responseMimeType: "application/json"
-  }
-});
-
-  const prompt = `
-    You are a professional restaurant menu translator. 
-    Translate the following English menu JSON into "${targetLanguage}".
-    
-    Rules:
-    1. Translate categoryName, item names, and item descs into natural, culturally accurate ${targetLanguage}.
-    2. Keep prices and restaurantName unchanged.
-    3. Set "detectedLanguage" to "${targetLanguage}".
-    4. Set "isRTL" to true ONLY if ${targetLanguage} uses a Right-To-Left script (e.g., Arabic, Hebrew, Urdu, Farsi). Otherwise false.
-    5. Return valid JSON maintaining the exact original structure.
-
-    Master Menu JSON:
-    ${JSON.stringify(masterMenu)}
-  `;
-
-  const result = await model.generateContent(prompt);
-  const responseText = result.response.text();
-  const translatedMenu = JSON.parse(responseText);
-
-  // Store in cache
-  translationCache[targetLanguage] = translatedMenu;
-  return translatedMenu;
-}
-
-// ==========================================
-// 3. Translation Webhook Endpoint
-// ==========================================
-app.post('/api/translate', async (req, res) => {
-  try {
-    const { input } = req.body;
-    
-    if (!input) {
-      return res.status(400).json({ error: "Missing 'input' field in request body." });
-    }
-
-    console.log(`\nReceived language trigger from ESP32: "${input}"`);
-
-    // Handle fallback if English requested
-    if (input.toLowerCase() === 'english' || input.toLowerCase() === 'en') {
-      currentMenuState = translationCache["English"];
-      broadcastMenuUpdate(currentMenuState);
-      return res.json({ success: true, language: "English" });
-    }
-
-    // Translate via Gemini / Cache
-    const translatedData = await translateMenuWithGemini(input);
-    
-    // Push update to all displays connected via SSE
-    broadcastMenuUpdate(translatedData);
-
-    return res.json({ success: true, language: input, data: translatedData });
-  } catch (error) {
-    console.error("Error processing translation:", error);
-    return res.status(500).json({ error: "Failed to translate menu", details: error.message });
-  }
-});
-
-// Fallback Route: Serve index.html for all other requests
-app.get('*', (req, res) => {
+// Explicit root route serving index.html
+app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Start Node Server
+// SSE endpoint for live updates
+app.get('/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  sseClients.push(res);
+  res.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`);
+
+  req.on('close', () => {
+    sseClients = sseClients.filter(client => client !== res);
+  });
+});
+
+// Translation cache
+const translationCache = {};
+
+// Hardware POST API endpoint
+app.post('/api/translate', (req, res) => {
+  const { input } = req.body;
+
+  if (!input) {
+    return res.status(400).json({ error: "Missing 'input' parameter in request body." });
+  }
+
+  // Acknowledge hardware POST request immediately
+  res.status(200).json({ 
+    success: true, 
+    message: "Translation queued successfully." 
+  });
+
+  // Background translation processing using Gemini Flash
+  (async () => {
+    const cacheKey = input.trim().toLowerCase();
+
+    if (translationCache[cacheKey]) {
+      console.log(`[Cache Hit] Serving cached result for: "${input}"`);
+      currentActiveMenu = translationCache[cacheKey];
+      sseClients.forEach(client => client.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`));
+      return;
+    }
+
+    if (!genAI) {
+      console.error("Gemini API call skipped: GEMINI_API_KEY environment variable is not set.");
+      return;
+    }
+
+    console.log(`[Gemini API Call] Translating menu for input: "${input}"`);
+
+    const promptText = `
+Analyze this input text: "${input}". 
+Identify the target language from this input (it can be a language name, a phrase spoken in that language, or a request).
+Translate the full menu into that detected language. Preserve exact dish image URLs and price strings without modification.
+
+Return raw JSON matching the required schema. Set 'isRTL' to true for right-to-left languages (e.g. Arabic, Hebrew, Urdu).
+
+Data:
+${JSON.stringify(masterMenu)}
+`;
+
+    try {
+      const model = genAI.getGenerativeModel({
+        model: "gemini-1.5-flash",
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: SchemaType.OBJECT,
+            properties: {
+              detectedLanguage: { type: SchemaType.STRING },
+              restaurantName: { type: SchemaType.STRING },
+              subtitle: { type: SchemaType.STRING },
+              isRTL: { type: SchemaType.BOOLEAN },
+              categories: {
+                type: SchemaType.ARRAY,
+                items: {
+                  type: SchemaType.OBJECT,
+                  properties: {
+                    categoryName: { type: SchemaType.STRING },
+                    items: {
+                      type: SchemaType.ARRAY,
+                      items: {
+                        type: SchemaType.OBJECT,
+                        properties: {
+                          id: { type: SchemaType.STRING },
+                          name: { type: SchemaType.STRING },
+                          desc: { type: SchemaType.STRING },
+                          price: { type: SchemaType.STRING },
+                          image: { type: SchemaType.STRING }
+                        },
+                        required: ['id', 'name', 'desc', 'price', 'image']
+                      }
+                    }
+                  },
+                  required: ['categoryName', 'items']
+                }
+              }
+            },
+            required: ['detectedLanguage', 'restaurantName', 'subtitle', 'isRTL', 'categories']
+          }
+        }
+      });
+
+      const result = await model.generateContent(promptText);
+      const translatedMenu = JSON.parse(result.response.text());
+
+      translationCache[cacheKey] = translatedMenu;
+      currentActiveMenu = translatedMenu;
+
+      // Broadcast update to all connected SSE clients
+      sseClients.forEach(client => client.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`));
+      console.log(`[Success] Menu updated to ${translatedMenu.detectedLanguage}`);
+
+    } catch (err) {
+      console.error("Gemini API Error:", err.message);
+    }
+  })();
+});
+
 app.listen(PORT, () => {
-  console.log(`\n==================================================`);
-  console.log(`Menu Server running on port ${PORT}`);
-  console.log(`SSE Stream Endpoint: http://localhost:${PORT}/api/events`);
-  console.log(`Translation Webhook: http://localhost:${PORT}/api/translate`);
-  console.log(`==================================================\n`);
+  console.log(`Server listening on port ${PORT}`);
 });
