@@ -5,49 +5,57 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Digital Menu Board</title>
   <style>
-    /* Absolute reset for digital screen displays */
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      user-select: none; /* Prevents text selection on display monitors */
+      user-select: none;
     }
 
     html, body {
       width: 100vw;
       height: 100vh;
-      overflow: hidden; /* Strict zero-scrolling guarantee */
-      background-color: #0b0f17; /* Deep matte black background */
+      overflow: hidden;
+      background-color: #0b0f17;
       color: #f8fafc;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
 
-    /* Master Board Container */
     #board {
       display: flex;
       flex-direction: column;
       width: 100vw;
       height: 100vh;
-      padding: 2.5rem 3rem;
+      padding: 2rem 2.5rem;
     }
 
-    /* Header Section */
     .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-bottom: 1.5rem;
+      padding-bottom: 1.25rem;
       border-bottom: 2px solid #1e293b;
-      margin-bottom: 2rem;
+      margin-bottom: 1.5rem;
       flex-shrink: 0;
     }
 
+    .title-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
     .brand-title {
-      font-size: 2.75rem;
+      font-size: 2.5rem;
       font-weight: 800;
-      color: #fbbf24; /* Warm Gold Accent */
+      color: #fbbf24;
       letter-spacing: -0.02em;
       text-transform: uppercase;
+    }
+
+    .brand-subtitle {
+      font-size: 1rem;
+      color: #94a3b8;
     }
 
     .subtitle-badge {
@@ -56,7 +64,7 @@
       gap: 0.75rem;
       background-color: #1e293b;
       border: 1px solid #334155;
-      padding: 0.6rem 1.25rem;
+      padding: 0.5rem 1.25rem;
       border-radius: 9999px;
       font-size: 1.1rem;
       font-weight: 600;
@@ -71,11 +79,10 @@
       box-shadow: 0 0 8px #22c55e;
     }
 
-    /* Full-Bleed Grid for Menu Columns */
     .grid-container {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 2rem;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
       flex-grow: 1;
       height: 100%;
       overflow: hidden;
@@ -85,35 +92,41 @@
       background: rgba(30, 41, 59, 0.4);
       border: 1px solid #1e293b;
       border-radius: 16px;
-      padding: 1.75rem;
+      padding: 1.25rem;
       display: flex;
       flex-direction: column;
       height: 100%;
     }
 
     .category-title {
-      font-size: 1.6rem;
+      font-size: 1.4rem;
       font-weight: 700;
-      color: #f8fafc;
-      margin-bottom: 1.25rem;
+      color: #38bdf8;
+      margin-bottom: 1rem;
       border-bottom: 1px solid #334155;
       padding-bottom: 0.5rem;
       text-transform: capitalize;
     }
 
-    /* Item rows layout */
     .item-list {
       display: flex;
       flex-direction: column;
-      gap: 1.25rem;
-      justify-content: flex-start;
+      gap: 1rem;
     }
 
     .menu-item {
       display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
+      align-items: center;
       gap: 1rem;
+    }
+
+    .item-img {
+      width: 52px;
+      height: 52px;
+      border-radius: 8px;
+      object-fit: cover;
+      flex-shrink: 0;
+      border: 1px solid #334155;
     }
 
     .item-details {
@@ -122,27 +135,33 @@
       flex: 1;
     }
 
+    .item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 0.5rem;
+    }
+
     .item-name {
-      font-size: 1.2rem;
+      font-size: 1.1rem;
       font-weight: 600;
       color: #f1f5f9;
     }
 
-    .item-desc {
-      font-size: 0.925rem;
-      color: #94a3b8;
-      margin-top: 0.25rem;
-      line-height: 1.3;
-    }
-
     .item-price {
-      font-size: 1.25rem;
+      font-size: 1.15rem;
       font-weight: 700;
       color: #fbbf24;
       white-space: nowrap;
     }
 
-    /* Right-To-Left (RTL) Auto-Layout */
+    .item-desc {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-top: 0.2rem;
+      line-height: 1.25;
+    }
+
     body.rtl {
       direction: rtl;
     }
@@ -152,7 +171,10 @@
 
   <div id="board">
     <header class="header">
-      <h1 class="brand-title" id="restaurant-name">PASU BISTRO</h1>
+      <div class="title-group">
+        <h1 class="brand-title" id="restaurant-name">PolyGlot menu</h1>
+        <p class="brand-subtitle" id="restaurant-subtitle">Loading Menu...</p>
+      </div>
       <div class="subtitle-badge">
         <span class="live-dot"></span>
         <span id="detected-language">English</span>
@@ -160,34 +182,31 @@
     </header>
 
     <main class="grid-container" id="menu-grid">
-      <!-- Dynamically populated via SSE without page reload -->
+      <!-- Categories load dynamically -->
     </main>
   </div>
 
   <script>
     const restaurantNameEl = document.getElementById('restaurant-name');
+    const restaurantSubtitleEl = document.getElementById('restaurant-subtitle');
     const languageBadgeEl = document.getElementById('detected-language');
     const menuGridEl = document.getElementById('menu-grid');
 
-    // Render Menu Cards with flexible property checks
     function renderMenu(data) {
       if (!data) return;
 
-      // Update RTL body direction for languages like Arabic/Hebrew
       if (data.isRTL) {
         document.body.classList.add('rtl');
       } else {
         document.body.classList.remove('rtl');
       }
 
-      // Update Title & Badge
-      restaurantNameEl.textContent = data.restaurantName || "PASU BISTRO";
+      restaurantNameEl.textContent = data.restaurantName || "PolyGlot menu";
+      restaurantSubtitleEl.textContent = data.subtitle || "";
       languageBadgeEl.textContent = data.detectedLanguage || data.language || "English";
 
-      // Clear grid
       menuGridEl.innerHTML = '';
 
-      // Flexible check for category array
       const categories = data.categories || data.menu || data.items;
 
       if (categories && Array.isArray(categories)) {
@@ -203,14 +222,18 @@
             const itemName = item.name || item.title || "";
             const itemDesc = item.desc || item.description || "";
             const itemPrice = item.price || "";
+            const itemImg = item.image || "";
 
             itemsHTML += `
               <div class="menu-item">
+                ${itemImg ? `<img src="${itemImg}" class="item-img" alt="${itemName}">` : ''}
                 <div class="item-details">
-                  <span class="item-name">${itemName}</span>
+                  <div class="item-header">
+                    <span class="item-name">${itemName}</span>
+                    <span class="item-price">${itemPrice}</span>
+                  </div>
                   <span class="item-desc">${itemDesc}</span>
                 </div>
-                <span class="item-price">${itemPrice}</span>
               </div>
             `;
           });
@@ -225,8 +248,8 @@
       }
     }
 
-    // Connect to Render SSE for instant voice updates
-    const evtSource = new EventSource('/api/events');
+    // Connect SSE stream
+    const evtSource = new EventSource('/events');
 
     evtSource.onmessage = function(event) {
       try {
@@ -238,7 +261,7 @@
     };
 
     evtSource.onerror = function(err) {
-      console.warn("SSE connection interrupted. Reconnecting automatically...");
+      console.warn("SSE stream disconnected. Reconnecting...");
     };
   </script>
 </body>

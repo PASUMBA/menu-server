@@ -6,7 +6,7 @@ const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Initialize Gemini API SDK
+// Initialize Gemini API
 const apiKey = process.env.GEMINI_API_KEY;
 let genAI = null;
 if (apiKey) {
@@ -15,17 +15,18 @@ if (apiKey) {
   console.warn("WARNING: GEMINI_API_KEY environment variable is missing!");
 }
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Serve static frontend files from 'public' directory
+// Serve static files from 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Master Menu Data
+// Baseline Master Menu Data
 const masterMenu = {
   restaurantName: "PolyGlot menu",
   subtitle: "A World of Flavors — English, Indian, Chinese & Japanese Specialties",
+  detectedLanguage: "English",
+  isRTL: false,
   categories: [
     {
       categoryName: "English Classics",
@@ -106,7 +107,7 @@ const masterMenu = {
   ]
 };
 
-let currentActiveMenu = { ...masterMenu, detectedLanguage: "English", isRTL: false };
+let currentActiveMenu = JSON.parse(JSON.stringify(masterMenu));
 let sseClients = [];
 
 // Explicit root route serving index.html
@@ -114,13 +115,15 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// SSE endpoint for live updates
+// SSE endpoint for display streaming
 app.get('/events', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
   sseClients.push(res);
+
+  // Send baseline/active state immediately upon connecting
   res.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`);
 
   req.on('close', () => {
@@ -131,7 +134,7 @@ app.get('/events', (req, res) => {
 // Translation cache
 const translationCache = {};
 
-// Hardware POST API endpoint
+// Hardware trigger endpoint
 app.post('/api/translate', (req, res) => {
   const { input } = req.body;
 
@@ -139,13 +142,13 @@ app.post('/api/translate', (req, res) => {
     return res.status(400).json({ error: "Missing 'input' parameter in request body." });
   }
 
-  // Acknowledge hardware POST request immediately
+  // Acknowledge ESP32 hardware trigger immediately
   res.status(200).json({ 
     success: true, 
-    message: "Translation queued successfully." 
+    message: "Translation request queued." 
   });
 
-  // Background translation processing using Gemini
+  // Background translation process
   (async () => {
     const cacheKey = input.trim().toLowerCase();
 
@@ -157,7 +160,7 @@ app.post('/api/translate', (req, res) => {
     }
 
     if (!genAI) {
-      console.error("Gemini API call skipped: GEMINI_API_KEY environment variable is not set.");
+      console.error("Gemini API call skipped: GEMINI_API_KEY environment variable is missing.");
       return;
     }
 
@@ -165,10 +168,10 @@ app.post('/api/translate', (req, res) => {
 
     const promptText = `
 Analyze this input text: "${input}". 
-Identify the target language from this input (it can be a language name, a phrase spoken in that language, or a request).
-Translate the full menu into that detected language. Preserve exact dish image URLs and price strings without modification.
+Identify the target language from this input (language name, phrase, or request).
+Translate the menu into that detected language. Keep dish image URLs and price strings intact without modification.
 
-Return raw JSON matching the required schema. Set 'isRTL' to true for right-to-left languages (e.g. Arabic, Hebrew, Urdu).
+Return raw JSON matching the required schema. Set 'isRTL' to true for right-to-left scripts.
 
 Data:
 ${JSON.stringify(masterMenu)}
@@ -222,7 +225,7 @@ ${JSON.stringify(masterMenu)}
       translationCache[cacheKey] = translatedMenu;
       currentActiveMenu = translatedMenu;
 
-      // Broadcast update to all connected SSE clients
+      // Push SSE update to all connected screens
       sseClients.forEach(client => client.write(`data: ${JSON.stringify(currentActiveMenu)}\n\n`));
       console.log(`[Success] Menu updated to ${translatedMenu.detectedLanguage}`);
 
