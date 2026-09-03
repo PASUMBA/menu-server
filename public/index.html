@@ -169,7 +169,7 @@
     const languageBadgeEl = document.getElementById('detected-language');
     const menuGridEl = document.getElementById('menu-grid');
 
-    // Render Menu Cards
+    // Render Menu Cards with flexible property checks
     function renderMenu(data) {
       if (!data) return;
 
@@ -182,31 +182,41 @@
 
       // Update Title & Badge
       restaurantNameEl.textContent = data.restaurantName || "PASU BISTRO";
-      languageBadgeEl.textContent = data.detectedLanguage || "English";
+      languageBadgeEl.textContent = data.detectedLanguage || data.language || "English";
 
-      // Rebuild categories grid
+      // Clear grid
       menuGridEl.innerHTML = '';
 
-      if (data.categories && Array.isArray(data.categories)) {
-        data.categories.forEach(cat => {
+      // Flexible check for category array
+      const categories = data.categories || data.menu || data.items;
+
+      if (categories && Array.isArray(categories)) {
+        categories.forEach(cat => {
           const card = document.createElement('div');
           card.className = 'category-card';
 
+          const title = cat.categoryName || cat.name || cat.category || "Items";
+          const itemsList = cat.items || [];
+
           let itemsHTML = '';
-          cat.items.forEach(item => {
+          itemsList.forEach(item => {
+            const itemName = item.name || item.title || "";
+            const itemDesc = item.desc || item.description || "";
+            const itemPrice = item.price || "";
+
             itemsHTML += `
               <div class="menu-item">
                 <div class="item-details">
-                  <span class="item-name">${item.name}</span>
-                  <span class="item-desc">${item.desc}</span>
+                  <span class="item-name">${itemName}</span>
+                  <span class="item-desc">${itemDesc}</span>
                 </div>
-                <span class="item-price">${item.price}</span>
+                <span class="item-price">${itemPrice}</span>
               </div>
             `;
           });
 
           card.innerHTML = `
-            <h2 class="category-title">${cat.categoryName}</h2>
+            <h2 class="category-title">${title}</h2>
             <div class="item-list">${itemsHTML}</div>
           `;
 
